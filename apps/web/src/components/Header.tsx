@@ -50,18 +50,21 @@ export function Header() {
             </div>
           </Link>
 
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-8">
-            <Link href="/products" className="hover:text-accent transition-colors">
-              Products
+          {/* Navigation Links */}
+          <nav className="hidden md:flex items-center space-x-6">
+            <Link href="/" className="hover:opacity-80 transition-opacity">
+              Home
             </Link>
-            <Link href="/categories" className="hover:text-accent transition-colors">
+            <Link href="/categories" className="hover:opacity-80 transition-opacity">
               Categories
             </Link>
-            <Link href="/about" className="hover:text-accent transition-colors">
+            <Link href="/products" className="hover:opacity-80 transition-opacity">
+              All Products
+            </Link>
+            <Link href="/about" className="hover:opacity-80 transition-opacity">
               About
             </Link>
-            <Link href="/contact" className="hover:text-accent transition-colors">
+            <Link href="/contact" className="hover:opacity-80 transition-opacity">
               Contact
             </Link>
           </nav>
@@ -123,38 +126,36 @@ export function Header() {
           <div className="md:hidden py-4 border-t border-white/20">
             <nav className="flex flex-col space-y-4">
               <Link
-                href="/products"
-                className="hover:text-accent transition-colors"
+                href="/"
+                className="block px-4 py-2 text-sm hover:bg-gray-100"
                 onClick={() => setMobileMenuOpen(false)}
               >
-                Products
+                Home
               </Link>
               <Link
                 href="/categories"
-                className="hover:text-accent transition-colors"
+                className="block px-4 py-2 text-sm hover:bg-gray-100"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 Categories
               </Link>
-              {isAuthenticated && (
-                <Link
-                  href="/orders"
-                  className="hover:text-accent transition-colors"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  My Orders
-                </Link>
-              )}
+              <Link
+                href="/products"
+                className="block px-4 py-2 text-sm hover:bg-gray-100"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                All Products
+              </Link>
               <Link
                 href="/about"
-                className="hover:text-accent transition-colors"
+                className="block px-4 py-2 text-sm hover:bg-gray-100"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 About
               </Link>
               <Link
                 href="/contact"
-                className="hover:text-accent transition-colors"
+                className="block px-4 py-2 text-sm hover:bg-gray-100"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 Contact

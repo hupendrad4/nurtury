@@ -1,0 +1,43 @@
+const fs = require('fs');
+const path = require('path');
+
+// Manually curated categories based on the website structure
+const categories = [
+  // Gardening
+  { id: 'gardening-tools', name: 'Gardening Tools', image: 'https://cdn.shopify.com/s/files/1/0015/2522/5588/collections/gardening-tools_300x300.jpg', slug: 'gardening-tools', parentCategory: 'Gardening' },
+  { id: 'garden-decor', name: 'Garden Decor', image: 'https://cdn.shopify.com/s/files/1/0015/2522/5588/collections/garden-decor_300x300.jpg', slug: 'garden-decor', parentCategory: 'Gardening' },
+  
+  // Plants
+  { id: 'indoor-plants', name: 'Indoor Plants', image: 'https://cdn.shopify.com/s/files/1/0015/2522/5588/collections/indoor-plants_300x300.jpg', slug: 'indoor-plants', parentCategory: 'Plants' },
+  { id: 'outdoor-plants', name: 'Outdoor Plants', image: 'https://cdn.shopify.com/s/files/1/0015/2522/5588/collections/outdoor-plants_300x300.jpg', slug: 'outdoor-plants', parentCategory: 'Plants' },
+  { id: 'flowering-plants', name: 'Flowering Plants', image: 'https://cdn.shopify.com/s/files/1/0015/2522/5588/collections/flowering-plants_300x300.jpg', slug: 'flowering-plants', parentCategory: 'Plants' },
+  
+  // Seeds
+  { id: 'vegetable-seeds', name: 'Vegetable Seeds', image: 'https://cdn.shopify.com/s/files/1/0015/2522/5588/collections/vegetable-seeds_300x300.jpg', slug: 'vegetable-seeds', parentCategory: 'Seeds' },
+  { id: 'flower-seeds', name: 'Flower Seeds', image: 'https://cdn.shopify.com/s/files/1/0015/2522/5588/collections/flower-seeds_300x300.jpg', slug: 'flower-seeds', parentCategory: 'Seeds' },
+  
+  // Planters
+  { id: 'ceramic-pots', name: 'Ceramic Pots', image: 'https://cdn.shopify.com/s/files/1/0015/2522/5588/collections/ceramic-pots_300x300.jpg', slug: 'ceramic-pots', parentCategory: 'Planters' },
+  { id: 'plastic-pots', name: 'Plastic Pots', image: 'https://cdn.shopify.com/s/files/1/0015/2522/5588/collections/plastic-pots_300x300.jpg', slug: 'plastic-pots', parentCategory: 'Planters' },
+  
+  // Soil & Fertilizers
+  { id: 'potting-mix', name: 'Potting Mix', image: 'https://cdn.shopify.com/s/files/1/0015/2522/5588/collections/potting-mix_300x300.jpg', slug: 'potting-mix', parentCategory: 'Soil & Fertilizers' },
+  { id: 'organic-fertilizers', name: 'Organic Fertilizers', image: 'https://cdn.shopify.com/s/files/1/0015/2522/5588/collections/organic-fertilizers_300x300.jpg', slug: 'organic-fertilizers', parentCategory: 'Soil & Fertilizers' },
+  
+  // Gifts
+  { id: 'plant-gifts', name: 'Plant Gifts', image: 'https://cdn.shopify.com/s/files/1/0015/2522/5588/collections/plant-gifts_300x300.jpg', slug: 'plant-gifts', parentCategory: 'Gifts' },
+  { id: 'gift-cards', name: 'Gift Cards', image: 'https://cdn.shopify.com/s/files/1/0015/2522/5588/collections/gift-cards_300x300.jpg', slug: 'gift-cards', parentCategory: 'Gifts' },
+  
+  // Accessories
+  { id: 'gardening-tools', name: 'Gardening Tools', image: 'https://cdn.shopify.com/s/files/1/0015/2522/5588/collections/gardening-tools_300x300.jpg', slug: 'gardening-tools', parentCategory: 'Accessories' },
+  { id: 'watering-cans', name: 'Watering Cans', image: 'https://cdn.shopify.com/s/files/1/0015/2522/5588/collections/watering-cans_300x300.jpg', slug: 'watering-cans', parentCategory: 'Accessories' },
+];
+
+const outputFile = path.join(__dirname, '../apps/web/src/data/categories.json');
+
+// Create directory if it doesn't exist
+fs.mkdirSync(path.dirname(outputFile), { recursive: true });
+
+// Save to file
+fs.writeFileSync(outputFile, JSON.stringify(categories, null, 2));
+console.log(`Saved ${categories.length} categories to ${outputFile}`);

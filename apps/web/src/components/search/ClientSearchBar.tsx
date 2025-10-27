@@ -3,7 +3,6 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, X, Clock, ChevronRight } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
 // Mock suggestions - in a real app, these would come from an API
 const POPULAR_SEARCHES = [
@@ -23,7 +22,15 @@ const CATEGORY_SUGGESTIONS = [
   { name: 'Gardening Tools', count: 9 },
 ];
 
-export function SearchBar({ initialQuery = '' }: { initialQuery?: string }) {
+type SuggestionType = 'search' | 'category' | 'popular';
+
+interface Suggestion {
+  type: SuggestionType;
+  text: string;
+  value: string;
+}
+
+export function ClientSearchBar({ initialQuery = '' }: { initialQuery?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [query, setQuery] = useState(initialQuery);
@@ -47,11 +54,8 @@ export function SearchBar({ initialQuery = '' }: { initialQuery?: string }) {
     if (!searchTerm.trim()) return;
     
     setRecentSearches(prev => {
-      // Remove if already exists
       const updated = prev.filter(term => term.toLowerCase() !== searchTerm.toLowerCase());
-      // Add to beginning
       updated.unshift(searchTerm);
-      // Keep only last 5 searches
       const limited = updated.slice(0, 5);
       localStorage.setItem('recentSearches', JSON.stringify(limited));
       return limited;
@@ -72,19 +76,13 @@ export function SearchBar({ initialQuery = '' }: { initialQuery?: string }) {
     };
   }, []);
 
-  // Update local state when URL changes (e.g., when user navigates back/forward)
-  useEffect(() => {
-    const searchQuery = searchParams.get('q') || '';
-    setQuery(searchQuery);
-  }, [searchParams]);
-
   // Debounced search
   const debouncedSearch = useCallback((searchTerm: string) => {
     if (!searchTerm.trim()) return;
     
     const params = new URLSearchParams(searchParams.toString());
     params.set('q', searchTerm.trim());
-    params.delete('page'); // Reset to first page on new search
+    params.delete('page');
     
     router.push(`/search?${params.toString()}`);
     saveSearch(searchTerm.trim());
@@ -94,7 +92,6 @@ export function SearchBar({ initialQuery = '' }: { initialQuery?: string }) {
     e.preventDefault();
     if (!query.trim()) return;
     
-    // Clear any pending debounced searches
     if (debounceTimer.current) {
       clearTimeout(debounceTimer.current);
     }
@@ -106,16 +103,12 @@ export function SearchBar({ initialQuery = '' }: { initialQuery?: string }) {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setQuery(value);
-    
-    // Show suggestions when typing
     setShowSuggestions(value.length > 0);
     
-    // Clear previous timer
     if (debounceTimer.current) {
       clearTimeout(debounceTimer.current);
     }
     
-    // Set new timer for debounced search
     if (value.trim().length > 1) {
       debounceTimer.current = setTimeout(() => {
         debouncedSearch(value);
@@ -127,7 +120,6 @@ export function SearchBar({ initialQuery = '' }: { initialQuery?: string }) {
     setQuery(suggestion);
     setShowSuggestions(false);
     
-    // Update URL and save to recent searches
     const params = new URLSearchParams(searchParams.toString());
     params.set('q', suggestion);
     params.delete('page');
@@ -142,29 +134,22 @@ export function SearchBar({ initialQuery = '' }: { initialQuery?: string }) {
   };
 
   // Filter suggestions based on current query
-  const filteredSuggestions = query
+  const filteredSuggestions: Suggestion[] = query
     ? [
-        // Exact matches first
-        ...(query.length > 1 ? [
-          {
-            type: 'search' as const,
-            text: `Search for "${query}"`,
-            value: query
-          }
-        ] : []),
+        ...(query.length > 1 ? [{
+          type: 'search' as const,
+          text: `Search for "${query}"`,
+          value: query
+        }] : []),
         
-        // Category matches
         ...CATEGORY_SUGGESTIONS
-          .filter(cat => 
-            cat.name.toLowerCase().includes(query.toLowerCase())
-          )
+          .filter(cat => cat.name.toLowerCase().includes(query.toLowerCase()))
           .map(cat => ({
             type: 'category' as const,
             text: `${cat.name} (${cat.count})`,
             value: cat.name
           })),
           
-        // Popular searches
         ...POPULAR_SEARCHES
           .filter(term => 
             term.toLowerCase().includes(query.toLowerCase()) && 
@@ -180,12 +165,12 @@ export function SearchBar({ initialQuery = '' }: { initialQuery?: string }) {
       ]
     : [];
 
-  // Show recent searches when input is focused and empty
+  // Show states
   const showRecentSearches = isFocused && !query && recentSearches.length > 0;
   const showEmptyState = isFocused && !query && recentSearches.length === 0;
   const showFilteredSuggestions = showSuggestions && query;
 
-  return (
+    return (
     <div className="relative w-full" ref={searchContainerRef}>
       <form onSubmit={handleSearch} className="relative">
         <div className="relative">

@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import { SearchFilters } from '@/components/search/SearchFilters';
 import { SearchResults } from '@/components/search/SearchResults';
-import { SearchBar } from '@/components/search/SearchBar';
+import { ClientSearchBar } from '@/components/search/ClientSearchBar';
 
 export default function SearchPage({
   searchParams,
@@ -13,7 +13,7 @@ export default function SearchPage({
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-4">Find Your Perfect Plants</h1>
         <div className="max-w-2xl">
-          <SearchBar initialQuery={searchParams.q as string} />
+          <ClientSearchBar initialQuery={searchParams.q as string} />
         </div>
       </div>
 
