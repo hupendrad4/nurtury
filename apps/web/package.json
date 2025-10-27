@@ -1,0 +1,35 @@
+{
+  "name": "@quoriumagro/web",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 6002",
+    "build": "next build",
+    "start": "next start -p 6002",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@quoriumagro/types": "workspace:*",
+    "@tanstack/react-query": "^5.17.9",
+    "axios": "^1.6.5",
+    "lucide-react": "^0.548.0",
+    "next": "14.0.4",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-hook-form": "^7.49.3",
+    "zod": "^3.22.4",
+    "zustand": "^4.4.7"
+  },
+  "devDependencies": {
+    "@quoriumagro/config": "workspace:*",
+    "@quoriumagro/tsconfig": "workspace:*",
+    "@types/node": "^20.10.6",
+    "@types/react": "^18.2.45",
+    "@types/react-dom": "^18.2.18",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.3.3"
+  }
+}
