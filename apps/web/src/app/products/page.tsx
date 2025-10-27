@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { ProductCard } from '@/components/ProductCard';
+import { useEffect, useMemo, useState, useContext } from 'react';
 import { Search } from 'lucide-react';
 import { mockProducts, type Product } from '@/data/mockProducts';
+import { CartContext, useCart } from '@/lib/cart-context';
+import { useRouter } from 'next/navigation';
+import { toast } from 'react-hot-toast';
 
 type Filters = {
   isMedicinal?: boolean;
@@ -23,6 +25,8 @@ export default function ProductsPage() {
   });
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const { addToCart } = useCart();
+  const router = useRouter();
 
   // Extract unique categories from products
   const categories = useMemo(() => {
@@ -312,7 +316,22 @@ export default function ProductsPage() {
                         </span>
                       )}
                     </div>
-                    <button className="bg-green-100 text-green-800 hover:bg-green-200 text-sm font-medium px-3 py-1.5 rounded-full transition-colors">
+                    <button 
+                      onClick={(e) => {
+                        e.preventDefault();
+                        addToCart(product.id, 1)
+                          .then(() => {
+                            toast.success(`${product.name} added to cart`);
+                          })
+                          .catch((error) => {
+                            toast.error(error.message || 'Failed to add to cart');
+                            if (error.message === 'Please login to add items to cart') {
+                              router.push('/login?redirect=/products');
+                            }
+                          });
+                      }}
+                      className="bg-green-100 text-green-800 hover:bg-green-200 text-sm font-medium px-3 py-1.5 rounded-full transition-colors"
+                    >
                       Add to Cart
                     </button>
                   </div>

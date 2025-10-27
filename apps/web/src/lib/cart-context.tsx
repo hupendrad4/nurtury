@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useMemo, ReactNode } from 'react';
+import { createContext, useContext, useState, useMemo, ReactNode, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useRouter } from 'next/navigation';
@@ -61,31 +61,77 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   // Check if user is authenticated
-  const isAuthenticated = typeof window !== 'undefined' && !!localStorage.getItem('accessToken');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  
+  // Initialize cart state from localStorage for guest users
+  const [guestCart, setGuestCart] = useState<Cart>(() => {
+    if (typeof window === 'undefined') {
+      return {
+        id: 'guest-cart',
+        items: [],
+        subtotal: 0,
+        tax: 0,
+        discount: 0,
+        total: 0
+      };
+    }
+    const savedCart = localStorage.getItem('guestCart');
+    return savedCart 
+      ? JSON.parse(savedCart) 
+      : {
+          id: 'guest-cart',
+          items: [],
+          subtotal: 0,
+          tax: 0,
+          discount: 0,
+          total: 0
+        };
+  });
+  
+  // Save guest cart to localStorage when it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('guestCart', JSON.stringify(guestCart));
+    }
+  }, [guestCart]);
+  
+  // Check authentication status on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('accessToken');
+      setIsAuthenticated(!!token);
+    }
+  }, []);
 
   // Fetch cart data
-  const { data: cart, isLoading } = useQuery<Cart>({
+  const { data: serverCart, isLoading } = useQuery<Cart>({
     queryKey: ['cart'],
     queryFn: async () => {
       if (!isAuthenticated) {
-        return null;
+        return guestCart;
       }
       try {
         const response = await api.get('/cart');
         return response.data;
       } catch (error: any) {
         if (error.response?.status === 401) {
-          // User not logged in, return empty cart
-          return null;
+          // If auth fails, fall back to guest cart
+          setIsAuthenticated(false);
+          return guestCart;
         }
         throw error;
       }
     },
-    enabled: isAuthenticated,
+    initialData: guestCart,
     retry: false,
   });
+  
+  // Use server cart for authenticated users, guest cart for guests
+  const cart = isAuthenticated ? serverCart : guestCart;
 
-  const itemCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) || 0;
+  const itemCount = useMemo(() => {
+    return cart?.items.reduce((sum, item) => sum + item.quantity, 0) || 0;
+  }, [cart]);
 
   const showError = (message: string) => {
     setErrorMessage(message);
@@ -93,24 +139,69 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setTimeout(() => setShowErrorToast(false), 4000);
   };
 
+  // No longer need to force login for adding to cart
   const checkAuthAndRedirect = () => {
-    if (!isAuthenticated) {
-      showError('Please login to add items to cart');
-      setTimeout(() => {
-        router.push('/login?redirect=/products');
-      }, 1500);
-      return false;
-    }
+    // Always return true since we support guest checkout
     return true;
   };
 
   // Add to cart mutation
   const addToCartMutation = useMutation({
-    mutationFn: ({ variantId, quantity }: { variantId: string; quantity: number }) => {
-      if (!checkAuthAndRedirect()) {
-        throw new Error('Not authenticated');
+    mutationFn: async ({ variantId, quantity }: { variantId: string; quantity: number }) => {
+      if (isAuthenticated) {
+        return api.post('/cart/items', { variantId, quantity });
+      } else {
+        // For guest users, update the guest cart in local storage
+        const product = (await import('@/data/mockProducts')).mockProducts.find((p: any) => p.id === variantId);
+        if (!product) throw new Error('Product not found');
+        
+        const existingItemIndex = guestCart.items.findIndex(item => item.id === variantId);
+        let updatedItems;
+        
+        if (existingItemIndex >= 0) {
+          updatedItems = [...guestCart.items];
+          updatedItems[existingItemIndex] = {
+            ...updatedItems[existingItemIndex],
+            quantity: updatedItems[existingItemIndex].quantity + quantity,
+            subtotal: (updatedItems[existingItemIndex].price * (updatedItems[existingItemIndex].quantity + quantity))
+          };
+        } else {
+          const newItem = {
+            id: variantId,
+            quantity,
+            price: product.price,
+            subtotal: product.price * quantity,
+            product: {
+              id: product.id,
+              name: product.name,
+              slug: product.slug,
+              images: product.images
+            },
+            variant: {
+              id: variantId,
+              name: 'Default',
+              sku: `SKU-${variantId}`,
+              inventory: 100
+            }
+          };
+          updatedItems = [...guestCart.items, newItem];
+        }
+        
+        const subtotal = updatedItems.reduce((sum, item) => sum + item.subtotal, 0);
+        const tax = subtotal * 0.1; // 10% tax for example
+        const total = subtotal + tax;
+        
+        const updatedCart = {
+          ...guestCart,
+          items: updatedItems,
+          subtotal,
+          tax,
+          total
+        };
+        
+        setGuestCart(updatedCart);
+        return { data: updatedCart };
       }
-      return api.post('/cart/items', { variantId, quantity });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cart'] });

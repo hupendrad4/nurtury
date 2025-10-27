@@ -1,22 +1,27 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useRouter } from 'next/navigation';
+import { toast } from 'react-hot-toast';
 import { Breadcrumb } from '@/components/Breadcrumb';
+import { indianStates, indianStatesWithCities, IndianState } from '@/lib/locations';
 
-interface Address {
-  id: string;
+interface AddressFormData {
   fullName: string;
   phone: string;
   addressLine1: string;
-  addressLine2?: string;
+  addressLine2: string;
   city: string;
-  state: string;
+  state: IndianState | '';
   postalCode: string;
   country: string;
   isDefault: boolean;
+}
+
+interface Address extends AddressFormData {
+  id: string;
 }
 
 interface Cart {
@@ -34,7 +39,7 @@ export default function CheckoutPage() {
   const [selectedAddressId, setSelectedAddressId] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<'RAZORPAY' | 'STRIPE' | 'COD'>('RAZORPAY');
   const [showAddressForm, setShowAddressForm] = useState(false);
-  const [addressForm, setAddressForm] = useState({
+  const [addressForm, setAddressForm] = useState<AddressFormData>({
     fullName: '',
     phone: '',
     addressLine1: '',
@@ -43,7 +48,23 @@ export default function CheckoutPage() {
     state: '',
     postalCode: '',
     country: 'India',
+    isDefault: false,
   });
+  
+  const [cities, setCities] = useState<readonly string[]>([]);
+  
+  // Update cities when state changes
+  useEffect(() => {
+    if (addressForm.state) {
+      // Convert readonly array to mutable array
+      const stateCities = [...(indianStatesWithCities[addressForm.state] || [])];
+      setCities(stateCities);
+      // Reset city when state changes
+      setAddressForm(prev => ({ ...prev, city: '' }));
+    } else {
+      setCities([]);
+    }
+  }, [addressForm.state]);
 
   const { data: cart } = useQuery<Cart>({
     queryKey: ['cart'],
@@ -51,15 +72,24 @@ export default function CheckoutPage() {
   });
 
   const { data: addresses } = useQuery<Address[]>({
-    queryKey: ['addresses'],
-    queryFn: () => api.get('/addresses').then((res) => res.data),
+    queryKey: ['user', 'addresses'],
+    queryFn: () => api.get('/users/me/addresses').then((res) => res.data),
   });
 
   const createAddressMutation = useMutation({
-    mutationFn: (data: typeof addressForm) => api.post('/addresses', data),
-    onSuccess: (response) => {
-      queryClient.invalidateQueries({ queryKey: ['addresses'] });
-      setSelectedAddressId(response.data.id);
+    mutationFn: async (data: AddressFormData) => {
+      try {
+        const response = await api.post('/users/me/addresses', data);
+        return response.data;
+      } catch (error: any) {
+        const errorMessage = error.response?.data?.message || 'Failed to save address';
+        console.error('API Error:', error.response?.data || error);
+        throw new Error(errorMessage);
+      }
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['user', 'addresses'] });
+      setSelectedAddressId(data.id);
       setShowAddressForm(false);
       setAddressForm({
         fullName: '',
@@ -70,16 +100,28 @@ export default function CheckoutPage() {
         state: '',
         postalCode: '',
         country: 'India',
+        isDefault: false,
       });
+      toast.success('Address saved successfully');
+    },
+    onError: (error: Error) => {
+      console.error('Error saving address:', error);
+      toast.error(error.message);
     },
   });
 
   const createOrderMutation = useMutation({
-    mutationFn: (data: { shippingAddressId: string; paymentMethod: string }) =>
-      api.post('/orders', data),
-    onSuccess: (response) => {
-      const order = response.data;
-
+    mutationFn: async (data: { shippingAddressId: string; paymentMethod: string }) => {
+      try {
+        const response = await api.post('/orders', data);
+        return response.data;
+      } catch (error: any) {
+        const errorMessage = error.response?.data?.message || 'Failed to create order';
+        console.error('Order creation error:', error.response?.data || error);
+        throw new Error(errorMessage);
+      }
+    },
+    onSuccess: (order) => {
       if (paymentMethod === 'COD') {
         router.push(`/orders/${order.id}/success`);
       } else if (paymentMethod === 'RAZORPAY') {
@@ -87,6 +129,10 @@ export default function CheckoutPage() {
       } else if (paymentMethod === 'STRIPE') {
         router.push(`/checkout/stripe?orderId=${order.id}`);
       }
+    },
+    onError: (error: Error) => {
+      console.error('Order creation failed:', error);
+      toast.error(`Order failed: ${error.message}`);
     },
   });
 
@@ -125,24 +171,81 @@ export default function CheckoutPage() {
 
   const handlePlaceOrder = () => {
     if (!selectedAddressId) {
-      alert('Please select a delivery address');
+      toast.error('Please select a delivery address');
       return;
     }
 
     if (!paymentMethod) {
-      alert('Please select a payment method');
+      toast.error('Please select a payment method');
       return;
     }
 
+    // Show loading state
+    toast.loading('Creating your order...');
+    
     createOrderMutation.mutate({
       shippingAddressId: selectedAddressId,
       paymentMethod,
+    }, {
+      onSettled: () => {
+        // Dismiss any loading toasts
+        toast.dismiss();
+      }
     });
   };
 
-  const handleAddressSubmit = (e: React.FormEvent) => {
+  const validateAddressForm = (): boolean => {
+    const requiredFields: (keyof AddressFormData)[] = [
+      'fullName',
+      'phone',
+      'addressLine1',
+      'city',
+      'state',
+      'postalCode'
+    ];
+
+    for (const field of requiredFields) {
+      if (!addressForm[field]) {
+        toast.error(`Please fill in ${field.replace(/([A-Z])/g, ' $1').toLowerCase()}`);
+        return false;
+      }
+    }
+
+    // Validate phone number format (basic validation)
+    const phoneRegex = /^[0-9]{10}$/;
+    if (!phoneRegex.test(addressForm.phone)) {
+      toast.error('Please enter a valid 10-digit phone number');
+      return false;
+    }
+
+    // Validate postal code (basic validation for Indian pincodes)
+    const postalCodeRegex = /^[1-9][0-9]{5}$/;
+    if (!postalCodeRegex.test(addressForm.postalCode)) {
+      toast.error('Please enter a valid 6-digit postal code');
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleAddressSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    createAddressMutation.mutate(addressForm);
+    
+    if (!validateAddressForm()) {
+      return;
+    }
+    
+    try {
+      const addressData = {
+        ...addressForm,
+        phone: String(addressForm.phone).trim(),
+        isDefault: Boolean(addressForm.isDefault)
+      };
+      
+      await createAddressMutation.mutateAsync(addressData);
+    } catch (error) {
+      // Error is already handled in the mutation's onError
+    }
   };
 
   if (!cart || cart.items.length === 0) {
@@ -219,24 +322,37 @@ export default function CheckoutPage() {
                       />
                     </div>
                     <div>
+                      <label className="block text-sm font-medium mb-1">State *</label>
+                      <select
+                        required
+                        value={addressForm.state}
+                        onChange={(e) => setAddressForm({ ...addressForm, state: e.target.value as IndianState })}
+                        className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-primary bg-white"
+                      >
+                        <option value="">Select State</option>
+                        {indianStates.map((state) => (
+                          <option key={state} value={state}>
+                            {state}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
                       <label className="block text-sm font-medium mb-1">City *</label>
-                      <input
-                        type="text"
+                      <select
                         required
                         value={addressForm.city}
                         onChange={(e) => setAddressForm({ ...addressForm, city: e.target.value })}
-                        className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-primary"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">State *</label>
-                      <input
-                        type="text"
-                        required
-                        value={addressForm.state}
-                        onChange={(e) => setAddressForm({ ...addressForm, state: e.target.value })}
-                        className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-primary"
-                      />
+                        disabled={!addressForm.state}
+                        className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-primary bg-white disabled:bg-gray-50 disabled:cursor-not-allowed"
+                      >
+                        <option value="">Select City</option>
+                        {cities.map((city) => (
+                          <option key={city} value={city}>
+                            {city}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-1">Postal Code *</label>
@@ -247,6 +363,18 @@ export default function CheckoutPage() {
                         onChange={(e) => setAddressForm({ ...addressForm, postalCode: e.target.value })}
                         className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-primary"
                       />
+                    </div>
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        id="isDefault"
+                        checked={addressForm.isDefault}
+                        onChange={(e) => setAddressForm({ ...addressForm, isDefault: e.target.checked })}
+                        className="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                      />
+                      <label htmlFor="isDefault" className="ml-2 block text-sm text-gray-700">
+                        Set as default address
+                      </label>
                     </div>
                   </div>
                   <div className="flex gap-3 mt-4">
@@ -396,59 +524,103 @@ export default function CheckoutPage() {
           </div>
 
           {/* Right Column - Order Summary */}
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg p-6 shadow-sm sticky top-4">
+          <div className="lg:sticky lg:top-4 h-fit">
+            <div className="bg-white rounded-lg p-6 shadow-sm">
               <h2 className="text-xl font-bold mb-4">Order Summary</h2>
-
+              
               <div className="space-y-3 mb-6">
-                <div className="flex justify-between text-gray-700">
-                  <span>Subtotal ({cart.items.length} items)</span>
-                  <span>₹{cart.subtotal.toFixed(2)}</span>
+                <div className="flex justify-between">
+                  <span>Subtotal</span>
+                  <span>₹{cart.subtotal?.toFixed(2) || '0.00'}</span>
                 </div>
-
+                <div className="flex justify-between">
+                  <span>Shipping</span>
+                  <span>Free</span>
+                </div>
                 {cart.discount > 0 && (
-                  <div className="flex justify-between text-green-600 font-medium">
+                  <div className="flex justify-between text-green-600">
                     <span>Discount</span>
-                    <span>-₹{cart.discount.toFixed(2)}</span>
+                    <span>-₹{cart.discount?.toFixed(2)}</span>
                   </div>
                 )}
-
-                <div className="flex justify-between text-gray-700">
-                  <span>Tax (GST)</span>
-                  <span>₹{cart.tax.toFixed(2)}</span>
-                </div>
-
-                <div className="flex justify-between text-gray-700">
-                  <span>Delivery Charges</span>
-                  <span className="text-green-600">FREE</span>
-                </div>
-
-                <div className="border-t pt-3">
-                  <div className="flex justify-between text-xl font-bold">
-                    <span>Total Amount</span>
-                    <span className="text-primary">₹{cart.total.toFixed(2)}</span>
+                <div className="border-t pt-3 mt-2">
+                  <div className="flex justify-between font-bold">
+                    <span>Total</span>
+                    <span>₹{cart.total?.toFixed(2) || '0.00'}</span>
                   </div>
                 </div>
               </div>
 
-              <button
-                onClick={handlePlaceOrder}
-                disabled={!selectedAddressId || createOrderMutation.isPending}
-                className="w-full bg-primary text-white py-3 rounded-lg font-semibold hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {createOrderMutation.isPending ? 'Processing...' : 'Place Order'}
-              </button>
+              <div className="space-y-4">
+                {/* Address Selection Status */}
+                {!selectedAddressId && (
+                  <div className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg">
+                    Please select or add a delivery address
+                  </div>
+                )}
 
-              {/* Security Badges */}
-              <div className="mt-6 pt-6 border-t">
-                <div className="text-center text-sm text-gray-600 mb-3">
-                  🔒 100% Secure & Safe Payments
+                {/* Payment Method Selection */}
+                <div className="space-y-2">
+                  <h3 className="font-medium">Payment Method</h3>
+                  <div className="space-y-2">
+                    <label className="flex items-center space-x-2 p-2 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="payment"
+                        checked={paymentMethod === 'RAZORPAY'}
+                        onChange={() => setPaymentMethod('RAZORPAY')}
+                        className="text-primary focus:ring-primary"
+                      />
+                      <span>Razorpay</span>
+                    </label>
+                    <label className="flex items-center space-x-2 p-2 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="payment"
+                        checked={paymentMethod === 'COD'}
+                        onChange={() => setPaymentMethod('COD')}
+                        className="text-primary focus:ring-primary"
+                      />
+                      <span>Cash on Delivery (COD)</span>
+                    </label>
+                  </div>
                 </div>
-                <div className="flex justify-center gap-2 flex-wrap">
-                  <img src="/payment-icons/visa.svg" alt="Visa" className="h-6" onError={(e) => e.currentTarget.style.display = 'none'} />
-                  <img src="/payment-icons/mastercard.svg" alt="Mastercard" className="h-6" onError={(e) => e.currentTarget.style.display = 'none'} />
-                  <img src="/payment-icons/upi.svg" alt="UPI" className="h-6" onError={(e) => e.currentTarget.style.display = 'none'} />
-                  <img src="/payment-icons/paytm.svg" alt="Paytm" className="h-6" onError={(e) => e.currentTarget.style.display = 'none'} />
+
+                <button
+                  onClick={handlePlaceOrder}
+                  disabled={!selectedAddressId || createOrderMutation.isPending}
+                  className={`w-full py-3 rounded-lg font-medium ${
+                    selectedAddressId 
+                      ? 'bg-primary text-white hover:bg-primary-dark' 
+                      : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  {createOrderMutation.isPending ? (
+                    <span className="flex items-center justify-center">
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Placing Order...
+                    </span>
+                  ) : 'Place Order'}
+                </button>
+
+                {!selectedAddressId && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddressForm(true)}
+                    className="w-full mt-4 text-center text-primary hover:text-primary-dark font-medium"
+                  >
+                    + Add Delivery Address
+                  </button>
+                )}
+                
+                {/* Payment Icons */}
+                <div className="flex gap-3 justify-center mt-4">
+                  <img src="/payment-icons/mastercard.svg" alt="Mastercard" className="h-6" onError={(e) => (e.currentTarget as HTMLImageElement).style.display = 'none'} />
+                  <img src="/payment-icons/upi.svg" alt="UPI" className="h-6" onError={(e) => (e.currentTarget as HTMLImageElement).style.display = 'none'} />
+                  <img src="/payment-icons/paytm.svg" alt="Paytm" className="h-6" onError={(e) => (e.currentTarget as HTMLImageElement).style.display = 'none'} />
                 </div>
               </div>
             </div>
